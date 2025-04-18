@@ -4,13 +4,15 @@ from gfx.gradient import gradient
 
 
 class Spike(pygame.sprite.Sprite):
-    def __init__(self, x: int, y: int, surface: pygame.Surface):
+    def __init__(self, x: int, y: int, surface: pygame.Surface, pad: int = 5):
         pygame.sprite.Sprite.__init__(self)
 
         self.surface = surface
         self.x = x
         self.y = y
-        self.rect = self.surface.get_rect(center=(self.x, self.y))
+        self.pad = pad
+        w, h = self.surface.get_size()
+        self.rect = self.surface.get_rect(y=y-h+self.pad, x=x)
 
 
 class SpikeFactory:
@@ -97,9 +99,9 @@ class SpikeFactory:
         return surface
 
     def new(self, x: int, y: int):
-        return Spike(x, y, self.spike_sprite)
+        return Spike(x, y, self.spike_sprite, self.pad)
 
     def right_of(self, spike: Spike) -> Spike:
         x = int(spike.x + spike.rect.width - 2 * self.pad)
         y = spike.x
-        return Spike(x, y, self.spike_sprite)
+        return Spike(x, y, self.spike_sprite, self.pad)
