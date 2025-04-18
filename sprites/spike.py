@@ -1,5 +1,4 @@
 import pygame
-from PIL import Image, ImageFilter
 
 from gfx.gradient import gradient
 
@@ -18,7 +17,7 @@ class SpikeFactory:
     def __init__(
         self,
         border_color: pygame.Color | str = "#ffffff",
-        size: int = 50,
+        size: int = 60,
         thickness: int = 2,
         bloom_radius: int = 10
     ):
@@ -26,7 +25,7 @@ class SpikeFactory:
         self.thickness = thickness
         self.border_color = border_color
         self.bloom_radius = bloom_radius
-
+        self.pad = 5
         self.spike_sprite = self.draw()
 
     @property
@@ -35,16 +34,27 @@ class SpikeFactory:
 
     @property
     def surface_points(self) -> list[tuple[int, int]]:
-        return [(0, self.size), (self.size, self.size), (self.size // 2, 0)]
+        return [(self.pad, self.size-self.pad),
+                (self.size - self.pad, self.size - self.pad),
+                (self.size // 2, self.pad)]
 
     @property
-    def masks(self) -> list[list[tuple[int, int]]]:
-        mask_a = [(0, 0), (self.full_size // 2, 0), (0, self.full_size)]
-        mask_b = [(self.full_size, 0), (self.full_size // 2, 0), (self.full_size, self.full_size)]
-        return [mask_a, mask_b]
+    def masks(self) -> tuple:
+        k = 4
+        mask_a = [(0, 0), (self.full_size // 2 + k, 0), (0, self.full_size)]
+        mask_b = [(self.full_size, 0), (self.full_size // 2 - k, 0), (self.full_size, self.full_size)]
+        return mask_a, mask_b
 
-    def draw_masks(self, surface: pygame.Surface) -> None:
-        for mask in self.masks:
+    @property
+    def blur_masks(self) -> tuple:
+        k = 5
+        mask_a = [(0, 0), (self.full_size // 2 - k, 0), (-k, self.full_size)]
+        mask_b = [(self.full_size, 0), (self.full_size // 2 + k, 0), (self.full_size + k, self.full_size)]
+        return mask_a, mask_b
+
+    @staticmethod
+    def draw_masks(surface: pygame.Surface, masks: tuple) -> None:
+        for mask in masks:
             pygame.draw.polygon(surface, '#00000000', mask)
 
     def draw_gradient(self, surface: pygame.Surface) -> None:
@@ -53,32 +63,43 @@ class SpikeFactory:
             self.full_size, self.full_size), (0, 0)
         )
 
-    def draw_border(self, surface: pygame.Surface) -> None:
-        pygame.draw.lines(surface, self.border_color, True, self.surface_points, width=self.thickness)
+    def draw_border(self, surface: pygame.Surface, thickness: int | None = None) -> None:
+        if thickness is None:
+            thickness = self.thickness
+
+        pygame.draw.lines(surface, self.border_color, True, self.surface_points, width=thickness)
 
     def add_bloom(self, surface: pygame.Surface) -> None:
-        bloom_surface = pygame.Surface((self.full_size, self.full_size), pygame.SRCALPHA)
-        self.draw_border(bloom_surface)
+        k = 1
+        t = 3
+        r = 2
 
-        surf_str = pygame.image.tostring(bloom_surface, 'RGBA', False)
-        surf_size = bloom_surface.get_size()
-        pil_blured = (Image.frombytes("RGBA", surf_size, surf_str)
-                      .filter(ImageFilter.GaussianBlur(radius=self.bloom_radius)))
+        bloom_surface = pygame.Surface((self.full_size, self.full_size), pygame.SRCALPHA, 32)
+        bloom_surface.fill('#ffffff00')
+        self.draw_border(bloom_surface, thickness=t)
+        bloom_surface = pygame.transform.gaussian_blur(bloom_surface, r, True)
+        bloom_surface = pygame.transform.smoothscale(bloom_surface, (self.full_size * k, self.full_size * k))
 
-        surf_pygame = pygame.image.fromstring(pil_blured.tobytes("raw"), surf_size, "RGBA")
-        surface.blit(surf_pygame, (0, 0))
+        offset = -self.full_size * abs(k - 1) / 2
 
+        surface.blit(bloom_surface, (offset, offset))
 
     def draw(self) -> pygame.Surface:
         surface = pygame.Surface((self.full_size, self.full_size), pygame.SRCALPHA)
 
         self.draw_gradient(surface)
-        self.add_bloom(surface)
-
-        self.draw_masks(surface)
+        SpikeFactory.draw_masks(surface, self.masks)
         self.draw_border(surface)
+
+        self.add_bloom(surface)
+        SpikeFactory.draw_masks(surface, self.blur_masks)
 
         return surface
 
     def new(self, x: int, y: int):
+        return Spike(x, y, self.spike_sprite)
+
+    def right_of(self, spike: Spike) -> Spike:
+        x = int(spike.x + spike.rect.width - 2 * self.pad)
+        y = spike.x
         return Spike(x, y, self.spike_sprite)
